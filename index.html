@@ -11,9 +11,12 @@ body {
   background: #f0f2f5;
   display: flex; align-items: center; justify-content: center;
   font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  padding: 20px 0;
 }
 .wrap { width: 100%; max-width: 420px; padding: 20px; }
 .top-label { font-size: 22px; font-weight: 600; color: #111; margin-bottom: 16px; }
+
+/* ── 메인 카드 ── */
 .card {
   background: #2079B4;
   border-radius: 20px;
@@ -64,7 +67,6 @@ body {
   position: absolute; left: 0; top: 0; bottom: 0;
   background: #2079B4;
   border-radius: 10px 0 0 10px;
-  transition: width 0.8s ease;
 }
 .bar-text {
   position: relative; z-index: 2;
@@ -77,6 +79,50 @@ body {
 .stat-val { font-size: 16px; font-weight: 600; color: #fff; }
 .stat-unit { font-size: 11px; color: rgba(255,255,255,0.7); }
 .clock-line { margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.45); text-align: right; }
+
+/* ── 서브 카드 공통 ── */
+.sub-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.sub-card {
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+  position: relative;
+  overflow: hidden;
+}
+.sub-card.left  { background: #1a6e47; }
+.sub-card.right { background: #7b3fa0; }
+
+.sub-label {
+  font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.7);
+  margin-bottom: 2px; letter-spacing: 0.2px;
+}
+.sub-celebrate {
+  font-size: 10px; font-weight: 700; color: #ffe066;
+  margin-bottom: 2px; letter-spacing: 0.2px;
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+.sub-end-date {
+  font-size: 9px; color: rgba(255,255,255,0.55); margin-bottom: 8px;
+}
+.sub-bar-wrap {
+  background: rgba(255,255,255,0.25); border-radius: 6px; height: 28px;
+  position: relative; overflow: hidden;
+}
+.sub-bar-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 6px 0 0 6px;
+}
+.sub-card.left  .sub-bar-fill { background: #3ecf8e; }
+.sub-card.right .sub-bar-fill { background: #c084fc; }
+.sub-bar-text {
+  position: relative; z-index: 2;
+  padding-left: 8px; font-size: 13px; font-weight: 700;
+  color: #fff; white-space: nowrap;
+  line-height: 28px;
+}
 </style>
 </head>
 <body>
@@ -117,45 +163,146 @@ body {
         <div class="stat-val">1826<span class="stat-unit">일</span></div>
       </div>
     </div>
+    <!-- 서브 바 영역 -->
+    <div class="sub-row">
+      <!-- 왼쪽: N돌 -->
+      <div class="sub-card left">
+        <div id="sub-left-label" class="sub-label">국민주권정부 1돌</div>
+        <div id="sub-left-end" class="sub-end-date">~ 2026.06.03</div>
+        <div class="sub-bar-wrap">
+          <div class="sub-bar-fill" id="sub-left-fill"></div>
+          <div class="sub-bar-text" id="sub-left-pct">...</div>
+        </div>
+      </div>
+      <!-- 오른쪽: 반환점 -->
+      <div class="sub-card right">
+        <div class="sub-label">국민주권정부 반환점</div>
+        <div class="sub-end-date">~ 2027.12.03</div>
+        <div class="sub-bar-wrap">
+          <div class="sub-bar-fill" id="sub-right-fill"></div>
+          <div class="sub-bar-text" id="sub-right-pct">...</div>
+        </div>
+      </div>
+    </div>
     <div class="clock-line" id="clock"></div>
   </div>
 </div>
+
 <script>
 (function(){
   var START = new Date('2025-06-04T00:00:00');
   var END   = new Date('2030-06-03T23:59:59');
   var TOTAL = END - START;
+
+  // 반환점
+  var MID_END = new Date('2027-12-03T23:59:59');
+  var MID_TOTAL = MID_END - START;
+
+  // N돌 구간 정의 (시작 포함, 끝 포함)
+  var DOL_PERIODS = [
+    { n:1, start: new Date('2025-06-04T00:00:00'), end: new Date('2026-06-03T23:59:59'), celebrate_end: new Date('2026-06-04T23:59:59') },
+    { n:2, start: new Date('2026-06-04T00:00:00'), end: new Date('2027-06-03T23:59:59'), celebrate_end: new Date('2027-06-04T23:59:59') },
+    { n:3, start: new Date('2027-06-04T00:00:00'), end: new Date('2028-06-03T23:59:59'), celebrate_end: new Date('2028-06-04T23:59:59') },
+    { n:4, start: new Date('2028-06-04T00:00:00'), end: new Date('2029-06-03T23:59:59'), celebrate_end: new Date('2029-06-04T23:59:59') },
+  ];
+
   function pad(n){ return String(n).padStart(2,'0'); }
+  function fmtDate(d){ return d.getFullYear()+'.'+ pad(d.getMonth()+1)+'.'+pad(d.getDate()); }
+
+  function setBarPct(fillEl, pctEl, pct) {
+    var bw = fillEl.parentElement.offsetWidth;
+    fillEl.style.width = Math.min(pct/100*bw, bw) + 'px';
+    pctEl.textContent = pct.toFixed(8) + '%';
+  }
+
   function tick(){
     var now = new Date();
+
+    // ── 시계
     document.getElementById('clock').textContent =
       now.getFullYear()+'.'+pad(now.getMonth()+1)+'.'+pad(now.getDate())+'  '+
       pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds())+' 기준';
+
+    // ── 메인 바
     if(now < START){
       var rd = Math.ceil((START-now)/86400000);
       document.getElementById('dday').textContent = 'D-'+rd;
-      document.getElementById('pct-text').textContent = '0.0000000%';
+      document.getElementById('pct-text').textContent = '0.00000000%';
       document.getElementById('bar-fill').style.width = '0px';
       document.getElementById('elapsed').textContent = '0';
       document.getElementById('remain').textContent = Math.round(TOTAL/86400000);
-      return;
-    }
-    if(now >= END){
+    } else if(now >= END){
       document.getElementById('dday').textContent = 'D+0';
-      document.getElementById('pct-text').textContent = '100.0000000%';
+      document.getElementById('pct-text').textContent = '100.00000000%';
       document.getElementById('bar-fill').style.width = '100%';
-      return;
+    } else {
+      var elapsed = now - START, remaining = END - now;
+      var pct = (elapsed/TOTAL)*100;
+      document.getElementById('dday').textContent = 'D-'+Math.ceil(remaining/86400000);
+      document.getElementById('elapsed').textContent = Math.floor(elapsed/86400000);
+      document.getElementById('remain').textContent = Math.ceil(remaining/86400000);
+      document.getElementById('pct-text').textContent = pct.toFixed(8)+'%';
+      var bw = document.getElementById('bar-fill').parentElement.offsetWidth;
+      document.getElementById('bar-fill').style.width = (pct/100*bw)+'px';
     }
-    var elapsed = now - START, remaining = END - now;
-    var pct = (elapsed/TOTAL)*100;
-    document.getElementById('dday').textContent = 'D-'+Math.ceil(remaining/86400000);
-    document.getElementById('elapsed').textContent = Math.floor(elapsed/86400000);
-    document.getElementById('remain').textContent = Math.ceil(remaining/86400000);
-    document.getElementById('pct-text').textContent = pct.toFixed(7)+'%';
-    var bw = document.getElementById('bar-fill').parentElement.offsetWidth;
-    document.getElementById('bar-fill').style.width = (pct/100*bw)+'px';
+
+    // ── 왼쪽 서브 바 (N돌)
+    var period = null;
+    for(var i=0; i<DOL_PERIODS.length; i++){
+      var p = DOL_PERIODS[i];
+      // 현재 진행 중인 돌 찾기
+      if(now >= p.start && now <= p.end){ period = p; break; }
+      // 축하 공백기 (돌 끝난 후 24시간)
+      if(now > p.end && now <= p.celebrate_end){ period = p; break; }
+    }
+
+    var lbl = document.getElementById('sub-left-label');
+    var endEl = document.getElementById('sub-left-end');
+    var lFill = document.getElementById('sub-left-fill');
+    var lPct  = document.getElementById('sub-left-pct');
+
+    if(period){
+      var isCelebrating = now > period.end && now <= period.celebrate_end;
+      if(isCelebrating){
+        lbl.className = 'sub-celebrate';
+        lbl.textContent = '🎉 국민주권정부 '+period.n+'돌을 축하합니다!';
+        endEl.textContent = '';
+        lFill.style.width = '100%';
+        lPct.textContent = '100.00000000%';
+      } else {
+        lbl.className = 'sub-label';
+        lbl.textContent = '국민주권정부 '+period.n+'돌';
+        endEl.textContent = '~ '+fmtDate(period.end);
+        var dolTotal = period.end - period.start;
+        var dolElapsed = now - period.start;
+        var dolPct = Math.min((dolElapsed/dolTotal)*100, 100);
+        setBarPct(lFill, lPct, dolPct);
+      }
+    } else {
+      // 4돌 이후
+      lbl.className = 'sub-label';
+      lbl.textContent = '국민주권정부 임기 완수';
+      endEl.textContent = '';
+      lFill.style.width = '100%';
+      lPct.textContent = '100.00000000%';
+    }
+
+    // ── 오른쪽 서브 바 (반환점)
+    var rFill = document.getElementById('sub-right-fill');
+    var rPct  = document.getElementById('sub-right-pct');
+    if(now < START){
+      setBarPct(rFill, rPct, 0);
+    } else if(now >= MID_END){
+      rFill.style.width = '100%';
+      rPct.textContent = '100.00000000%';
+    } else {
+      var midElapsed = now - START;
+      var midPct = (midElapsed/MID_TOTAL)*100;
+      setBarPct(rFill, rPct, midPct);
+    }
   }
-  tick(); setInterval(tick, 1000);
+
+  tick(); setInterval(tick, 100);
 })();
 </script>
 </body>
